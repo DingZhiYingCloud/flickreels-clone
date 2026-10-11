@@ -1,0 +1,22 @@
+{% extends 'template.html' %}
+
+{% block title %}服务器错误 - 网站名称{% endblock %}
+{% block keywords %}500,服务器错误,网站名称{% endblock %}
+{% block description %}网站名称500错误页面,服务器开小差了,请稍后重试或返回首页继续浏览。{% endblock %}
+
+{% block content %}
+<div class="main">
+    <div class="layui-container">
+        <div class="error-page">
+            <div class="error-code">500</div>
+            <h1>抱歉，服务器开小差了</h1>
+            <p>服务器遇到一些问题，请稍后重试，或返回首页继续浏览。</p>
+            <div class="error-btns">
+                <a href="/">返回首页</a>
+                <a href="javascript:history.back();" class="error-btn-back">返回上一页</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% include 'common_html/footer.html' %}
+{% endblock %}

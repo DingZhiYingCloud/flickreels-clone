@@ -1,0 +1,27 @@
+{% extends 'template.html' %}
+{% load site %}
+
+{% block html_lang %}{{ html_lang }}{% endblock %}
+{% block title %}{{ title }}{% endblock %}
+{% block description %}{{ description }}{% endblock %}
+
+{% block head %}
+<meta property="og:title" content="{{ og_title }}">
+<meta property="og:description" content="{{ og_description }}">
+{% if og_image %}<meta property="og:image" content="{{ og_image }}">{% endif %}
+<link rel="stylesheet" href="/static/css/entry.css">
+<link rel="stylesheet" href="/static/css/play-num.css">
+<link rel="stylesheet" href="/static/css/play-breadcrumb.css">
+{% endblock %}
+
+{% block content %}
+{% include 'common_html/icons.html' %}
+{# 抓取到的页面内容：其中下载占位符会被替换为母版中定义的统一下载链接 #}
+{{ body_html|app_link:app_download_url|safe }}
+{% endblock %}
+
+{% block js %}
+<script src="/static/js/home.js"></script>
+<script src="/static/js/vendor/hls.min.js"></script>
+<script src="/static/js/play.js"></script>
+{% endblock %}

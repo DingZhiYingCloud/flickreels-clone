@@ -1,0 +1,6 @@
+lxml
+Django 
+django-cors-headers 
+requests 
+pycryptodome
+python-dotenv 

@@ -1,0 +1,61 @@
+{% comment %}
+全站统一下载链接（App 下载）：只需修改下面这一处，
+全站所有「下载 / App」位置（顶部导航 App、底部推广条、播放页下载按钮等）
+都会使用它。把下面的地址替换成你实际的下载链接即可。
+{% endcomment %}
+{% with app_download_url="https://example.com/app-download" %}
+<!DOCTYPE html>
+<html lang="{% block html_lang %}en-US{% endblock %}">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit" />
+    <meta name="force-rendering" content="webkit" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+    <meta name="baidu-site-verification" content="codeva-D86XF7EVRs" />
+    <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <title>{% block title %}{% endblock %}</title>
+    <meta name="keywords" content="{% block keywords %}{% endblock %}" />
+    <meta name="description" content="{% block description %}{% endblock %}" />
+    <!-- 搜索引擎爬虫：允许收录与跟随链接 -->
+    <meta name="robots" content="index, follow" />
+    <!-- 规范链接：声明当前页面唯一权威地址，避免重复内容（分页/参数等）被拆分收录 -->
+    <link rel="canonical" href="{% block canonical %}{{ request.build_absolute_uri }}{% endblock %}" />
+    <!-- 多语言版本声明（hreflang）：告知搜索引擎各语言版本的对应地址 -->
+    {% block hreflang %}
+    <link rel="alternate" hreflang="x-default" href="{{ request.scheme }}://{{ request.get_host }}/" />
+    <link rel="alternate" hreflang="en" href="{{ request.scheme }}://{{ request.get_host }}/" />
+    <link rel="alternate" hreflang="ja" href="{{ request.scheme }}://{{ request.get_host }}/ja/" />
+    <link rel="alternate" hreflang="ko" href="{{ request.scheme }}://{{ request.get_host }}/ko/" />
+    <link rel="alternate" hreflang="es" href="{{ request.scheme }}://{{ request.get_host }}/es/" />
+    <link rel="alternate" hreflang="id" href="{{ request.scheme }}://{{ request.get_host }}/id/" />
+    <link rel="alternate" hreflang="de" href="{{ request.scheme }}://{{ request.get_host }}/de/" />
+    <link rel="alternate" hreflang="th" href="{{ request.scheme }}://{{ request.get_host }}/th/" />
+    <link rel="alternate" hreflang="tc" href="{{ request.scheme }}://{{ request.get_host }}/tc/" />
+    <link rel="alternate" hreflang="fr" href="{{ request.scheme }}://{{ request.get_host }}/fr/" />
+    <link rel="alternate" hreflang="pt" href="{{ request.scheme }}://{{ request.get_host }}/pt/" />
+    {% endblock %}
+    <!-- 移动端浏览器主题色 -->
+    <meta name="theme-color" content="#1677ff" />
+    <!-- 站点图标（favicon）：与源站 https://www.flickreels.net 使用同一图标 -->
+    <link rel="icon" type="image/png" href="/media/favicon.ico?v=2">
+    <link rel="shortcut icon" href="/media/favicon.ico?v=2">
+    <link rel="apple-touch-icon" href="/media/favicon.ico?v=2">
+    <link rel="bookmark" href="/media/favicon.ico?v=2">
+    <!-- 结构化数据（schema.org）：声明站点信息与站内搜索，助力搜索引擎理解网站 -->
+
+    {% block head %}{% endblock %}
+
+</head>
+
+<body>
+    {% include 'common_html/headers.html' %}
+    {% block content %}{% endblock %}
+
+    {% block js %}{% endblock %}
+    
+</body>
+
+</html>
+{% endwith %}
