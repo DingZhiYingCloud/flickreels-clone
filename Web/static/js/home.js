@@ -80,6 +80,23 @@
       track.insertBefore(pre, track.firstChild);
       originals.forEach(function (s) { track.appendChild(s.cloneNode(true)); });
 
+      // 卡片上的 "Play" 按钮：源站是無跳轉的 div，改成指向該劇播放頁的鏈接
+      Array.prototype.forEach.call(root.querySelectorAll('div[data-item]'), function (btn) {
+        if (btn.closest('a[href]')) return;
+        var slide = btn.closest('[class*="aspect-800/400"]');
+        var cover = slide && slide.querySelector('a[href*="/playlist/"]');
+        if (!cover) return;
+        var a = document.createElement('a');
+        Array.prototype.forEach.call(btn.attributes, function (at) {
+          a.setAttribute(at.name, at.value);
+        });
+        a.setAttribute('href', cover.getAttribute('href'));
+        a.setAttribute('reload', 'false');
+        a.style.textDecoration = 'none';
+        while (btn.firstChild) { a.appendChild(btn.firstChild); }
+        btn.parentNode.replaceChild(a, btn);
+      });
+
       // 移除源站用于初始定位的类，改由 JS 控制 transform
       track.classList.remove('swiper-track--pc-init', 'swiper-track--mobile-loop-init');
       track.style.transition = 'none';
@@ -161,7 +178,13 @@
         animate(false);
         stopAuto();
         viewport.style.cursor = 'grabbing';
-        try { viewport.setPointerCapture(e.pointerId); } catch (err) {}
+        // 从卡片内的链接（<a href>）上开始时不捕获指针：
+        // 否则 click 会被重定向到 viewport，封面/标题链接无法跳转；
+        // 拖拽后的误触点击仍由下方 moved 判断拦截
+        var onLink = e.target && e.target.closest && e.target.closest('a[href]');
+        if (!onLink) {
+          try { viewport.setPointerCapture(e.pointerId); } catch (err) {}
+        }
       });
 
       viewport.addEventListener('pointermove', function (e) {
@@ -191,9 +214,10 @@
       viewport.addEventListener('pointercancel', endDrag);
       viewport.addEventListener('pointerleave', endDrag);
 
-      // 拖拽后抑制误触发的链接点击
+      // 拖拽后抑制误触发的链接点击：只有确实拖动过（位移 > 10px）才拦截，
+      // 阈值放宽以容忍触摸点按的轻微抖动，避免"能滑动但点不动"
       track.addEventListener('click', function (e) {
-        if (moved > 6) { e.preventDefault(); e.stopPropagation(); }
+        if (moved > 10) { e.preventDefault(); e.stopPropagation(); }
       }, true);
 
       // 自动播放

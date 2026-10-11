@@ -1,6 +1,9 @@
 # 项目URL配置
-from django.shortcuts import render
-from django.http import HttpResponse
+import re
+from urllib.parse import quote
+
+from django.shortcuts import render, redirect
+from django.http import HttpResponse, Http404
 from django.core.cache import cache
 
 from Web.crawler.flickreels import FlickReelsCrawler
@@ -58,6 +61,22 @@ def play(request, slug, drama_id, episode, locale=''):
                              '内容加载失败，请稍后重试</div>',
             }
     return render(request, 'play.html', data)
+
+
+# ============ 短剧详情页 / 剧集列表页的重定向 ============
+# 源站每个短剧有独立的 /movie/<slug>-<id>（详情）与 /episodes-list/<slug>-<id>（剧集列表）页面；
+# 本站没有这两个页面，统一 301 到该剧第 1 集播放页（播放页本身已含剧集列表），
+# 避免首页/列表页/轮播卡片里大量此类链接点进去 404。
+
+
+def drama_detail(request, slug_id, locale=''):
+    """把 /movie|/episodes-list/<slug>-<id> 301 跳转到 /playlist/<slug>/<id>/episode-1"""
+    m = re.match(r'^(?P<slug>.+)-(?P<drama_id>\d+)$', slug_id or '')
+    if not m:
+        raise Http404('无效的短剧详情地址')
+    prefix = f'/{locale}' if locale else ''
+    target = f'{prefix}/playlist/{quote(m.group("slug"))}/{m.group("drama_id")}/episode-1'
+    return redirect(target, permanent=True)
 
 
 # ============ 短剧浏览页 ============

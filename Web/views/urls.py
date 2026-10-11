@@ -29,6 +29,19 @@ urlpatterns += [
     for loc in LOCALES
 ]
 
+# 短剧详情页 / 剧集列表页：源站为 /movie/<slug>-<id>、/episodes-list/<slug>-<id>，
+# 本站无这两页，统一 301 到该剧第 1 集播放页
+_DETAIL_PREFIXES = ('movie', 'episodes-list')
+urlpatterns += [
+    path(f'{p}/<str:slug_id>', request.drama_detail, name=p.replace('-', '_'))
+    for p in _DETAIL_PREFIXES
+]
+urlpatterns += [
+    path(f'{loc}/{p}/<str:slug_id>', request.drama_detail, {'locale': loc},
+         name=f'{p.replace("-", "_")}_{loc}')
+    for loc in LOCALES for p in _DETAIL_PREFIXES
+]
+
 # 短剧浏览页：/classify 及 /classify/<分类>/<id>/<页>（英文）与各语言前缀版本
 urlpatterns += [
     path('classify/', request.classify, name='classify'),

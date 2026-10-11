@@ -37,6 +37,46 @@ APP_DOWNLOAD_LABEL = {
     'pt': 'Baixar APP',
 }
 
+# ============================================================
+# 「下载/看剧送钱」促销文案（按语言）
+# 奖励基准：4000 卢比（印度），按汇率换算为各语言对应货币（近似值，可直接改）。
+# 三处共用：播放页顶部横幅、App 页顶部横幅、播放页"下载弹框"（锁定遮罩）标题。
+# ============================================================
+REWARD_COPY = {
+    'en': {'amount': '$48',       'title': 'Download & Get {amount} Free!',
+           'sub': 'Watch short dramas and earn money',      'cta': 'Download Now'},
+    'tc': {'amount': 'NT$1,500',  'title': '下載即送 {amount}！',
+           'sub': '看短劇還能領現金',                        'cta': '立即下載'},
+    'ja': {'amount': '7,000円',   'title': 'ダウンロードで{amount}プレゼント！',
+           'sub': '短編ドラマを見て稼ごう',                  'cta': '今すぐダウンロード'},
+    'ko': {'amount': '65,000원',  'title': '다운로드하면 {amount} 지급!',
+           'sub': '숏드라마 보며 용돈 벌기',                 'cta': '지금 다운로드'},
+    'es': {'amount': '45 €',      'title': '¡Descarga y recibe {amount} gratis!',
+           'sub': 'Gana dinero viendo series cortas',       'cta': 'Descargar ahora'},
+    'id': {'amount': 'Rp760.000', 'title': 'Unduh dan dapat {amount} gratis!',
+           'sub': 'Nonton drama pendek sambil dapat uang',  'cta': 'Unduh Sekarang'},
+    'de': {'amount': '45 €',      'title': 'Herunterladen und {amount} gratis!',
+           'sub': 'Geld verdienen mit Kurzdramen',          'cta': 'Jetzt herunterladen'},
+    'th': {'amount': '฿1,700',    'title': 'ดาวน์โหลดรับ {amount} ฟรี!',
+           'sub': 'ดูซีรีส์สั้นแล้วรับเงิน',                   'cta': 'ดาวน์โหลดเลย'},
+    'fr': {'amount': '45 €',      'title': 'Téléchargez et recevez {amount} offerts !',
+           'sub': "Gagnez de l'argent en regardant des séries", 'cta': 'Télécharger'},
+    'pt': {'amount': 'R$260',     'title': 'Baixe e ganhe {amount} grátis!',
+           'sub': 'Ganhe dinheiro assistindo dramas',       'cta': 'Baixar agora'},
+}
+
+
+def reward_copy(locale=''):
+    """返回该语言的促销文案（标题中的 {amount} 已替换为对应货币金额）"""
+    data = REWARD_COPY.get(locale or 'en') or REWARD_COPY['en']
+    amount = data['amount']
+    return {
+        'amount': amount,
+        'title': data['title'].format(amount=amount),
+        'sub': data['sub'],
+        'cta': data['cta'],
+    }
+
 
 class FlickReelsCrawler:
     """FlickReels 内容爬虫"""
@@ -87,6 +127,7 @@ class FlickReelsCrawler:
         locked = not hls_url
 
         self._clean(doc, hls_url, locked, locale)
+        self._inject_banner(doc, locale)
 
         body = doc.body
         if body is None:
@@ -205,6 +246,7 @@ class FlickReelsCrawler:
 
         self._clean(doc, '', False, locale)
         self._rewrite_app_ui(doc, locale)
+        self._inject_banner(doc, locale)
 
         body = doc.body
         if body is None:
@@ -413,6 +455,40 @@ class FlickReelsCrawler:
         v = doc.xpath('//video')
         return (v[0].get('poster') or '').strip() if v else ''
 
+    # ------------------------------------------------------ 促销（送钱）横幅
+    @staticmethod
+    def _main_content(doc):
+        """主内容区（顶部导航之下、底部推广条之上的容器）"""
+        nodes = doc.xpath(
+            '//div[contains(@class,"min-h-screen")]'
+            '/div[contains(concat(" ",normalize-space(@class)," ")," flex-1 ")]')
+        return nodes[0] if nodes else None
+
+    @staticmethod
+    def _reward_banner_html(locale):
+        """促销横幅：左侧「标题 + 副标题」，右侧下载按钮（指向统一下载链接）"""
+        r = reward_copy(locale)
+        return (
+            '<div style="position:relative;z-index:1000;margin:12px;padding:14px 16px;'
+            'border-radius:14px;background:linear-gradient(90deg,#e58c00,#fcdb00);'
+            'color:#1a1a1a;display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+            '<div style="flex:1 1 200px;min-width:0">'
+            f'<div style="font-weight:800;font-size:17px;line-height:1.25">{r["title"]}</div>'
+            f'<div style="font-size:13px;opacity:.85;margin-top:2px">{r["sub"]}</div>'
+            '</div>'
+            f'<a href="{APP_URL_PLACEHOLDER}" target="_blank" rel="noopener" '
+            'style="flex:none;background:#1a1a1a;color:#fcdb00;font-weight:700;font-size:14px;'
+            'padding:10px 18px;border-radius:9999px;text-decoration:none;white-space:nowrap">'
+            f'{r["cta"]}</a></div>'
+        )
+
+    def _inject_banner(self, doc, locale):
+        """促销横幅插到主内容区之前（顶部导航之下、全宽；播放页 / App 页共用）"""
+        main = self._main_content(doc)
+        if main is None:
+            return
+        main.addprevious(LH.fragment_fromstring(self._reward_banner_html(locale)))
+
     def _clean(self, doc, hls_url, locked, locale):
         """清理页面：去脚本/注释、站内链接改相对、播放器注入播放地址、
         统一下载位置（底部推广条 / 导航 App / 锁定遮罩）"""
@@ -463,6 +539,30 @@ class FlickReelsCrawler:
             v.set('style', 'width:100%;height:100%;display:block;object-fit:contain;background:#000')
             if poster:
                 v.set('poster', poster)
+
+        # 播放页：源站把播放器容器设成 fixed（左侧固定，滚动页面时纹丝不动、还会盖住内容），
+        # 这里把它改回普通文档流，让播放器随页面一起滚动。
+        video_box_cls = {
+            'fixed', 'top-35.5', 'z-100', 'lg:z-50', 'lg:fixed', 'lg:top-16.5',
+            'lg:left-0', 'lg:right-119', 'lg:bottom-0', 'lg:h-auto', 'lg:mt-0',
+            'lg:min-h-100', 'lg:w-auto',
+        }
+        for box in doc.xpath('//div[contains(concat(" ",normalize-space(@class)," ")," h-90 ")'
+                             ' and contains(@class,"bg-black")]'):
+            kept = [c for c in (box.get('class') or '').split() if c not in video_box_cls]
+            box.set('class', ' '.join(kept + ['relative', 'lg:flex-1',
+                                              'lg:h-[calc(100vh-4.125rem)]']))
+        # 该行容器不再固定高度/裁剪（否则内容会被裁掉、页面滚动也会异常）
+        for row in doc.xpath('//div[contains(@class,"lg:h-[calc(100vh-4.125rem)]")'
+                             ' and contains(@class,"lg:overflow-hidden")]'):
+            row.set('class', ' '.join(
+                c for c in (row.get('class') or '').split()
+                if c not in ('lg:h-[calc(100vh-4.125rem)]', 'lg:overflow-hidden')))
+        # 原本给 fixed 播放器占位的移动端空块，播放器回到文档流后不再需要
+        for spacer in doc.xpath('//div[contains(concat(" ",normalize-space(@class)," ")," h-90 ")'
+                                ' and contains(@class,"lg:hidden")'
+                                ' and contains(@class,"pointer-events-none")]'):
+            spacer.getparent().remove(spacer)
 
         # 底部推广条右侧 CTA -> 指向统一下载链接（顶部导航 "App" 保持站内 /app 链接）
         self._rewrite_bottom_bar(doc)
@@ -550,6 +650,19 @@ class FlickReelsCrawler:
         if inner:
             # 原容器为固定高度（含二维码占位），改为自适应
             target.set('style', (target.get('style') or '') + ';height:auto')
+
+        # 促销标题（"送钱"钩子）置于弹框顶部
+        r = reward_copy(locale)
+        headline = (
+            '<div style="text-align:center;margin-bottom:14px">'
+            f'<div style="font-weight:800;font-size:20px;color:#fcdb00;line-height:1.25">'
+            f'{r["title"]}</div>'
+            f'<div style="font-size:13px;color:rgba(255,255,255,.7);margin-top:4px">'
+            f'{r["sub"]}</div>'
+            '</div>'
+        )
+        target.insert(0, LH.fragment_fromstring(headline))
+
         label = APP_DOWNLOAD_LABEL.get(locale or 'en', APP_DOWNLOAD_LABEL['en'])
         btn_html = (
             f'<a href="{APP_URL_PLACEHOLDER}" target="_blank" rel="noopener" '
