@@ -13,6 +13,7 @@
        按钮；按钮地址使用占位符 __APP_DOWNLOAD_URL__，由模板渲染时替换为母版
        template.html 中定义的统一下载链接。
 """
+import hashlib
 import os
 import re
 from urllib.parse import quote
@@ -78,6 +79,31 @@ def reward_copy(locale=''):
     }
 
 
+# ============================================================
+# 「点赞」文案（按语言）
+# 播放页播放器右上角显示点赞按钮，点赞数由剧集 id 派生（1 万 ~ 100 万）；
+# 点击点赞会弹出"需先下载 APP"的提示，引导下载。
+# ============================================================
+LIKE_COPY = {
+    'en': {'hint': 'Please download the APP to like this episode', 'cta': 'Download APP'},
+    'tc': {'hint': '需要先下載 APP 才能點讚', 'cta': '下載APP'},
+    'ja': {'hint': 'いいねするにはアプリのダウンロードが必要です', 'cta': 'アプリをダウンロード'},
+    'ko': {'hint': '좋아요를 누르려면 앱을 먼저 다운로드해야 합니다', 'cta': '앱 다운로드'},
+    'es': {'hint': 'Descarga la APP para dar me gusta a este episodio', 'cta': 'Descargar APP'},
+    'id': {'hint': 'Unduh APP untuk menyukai episode ini', 'cta': 'Unduh APP'},
+    'de': {'hint': 'Bitte lade die APP herunter, um zu liken', 'cta': 'APP herunterladen'},
+    'th': {'hint': 'ต้องดาวน์โหลดแอปก่อนจึงจะกดถูกใจได้', 'cta': 'ดาวน์โหลดแอป'},
+    'fr': {'hint': "Téléchargez l'APP pour aimer cet épisode", 'cta': "Télécharger l'APP"},
+    'pt': {'hint': 'Baixe o APP para curtir este episódio', 'cta': 'Baixar APP'},
+}
+
+
+def like_count(drama_id):
+    """点赞数：由剧集 id 派生（同一部剧显示恒定），范围 1 万 ~ 100 万"""
+    h = int(hashlib.md5(f'flickreels-like-{int(drama_id)}'.encode()).hexdigest(), 16)
+    return 10000 + h % (1000000 - 10000 + 1)
+
+
 class FlickReelsCrawler:
     """FlickReels 内容爬虫"""
 
@@ -109,9 +135,9 @@ class FlickReelsCrawler:
     def fetch_play(self, locale, slug, drama_id, episode):
         """抓取并解析播放页"""
         raw = self.get(self.build_play_path(locale, slug, drama_id, episode))
-        return self.parse_play(raw, locale)
+        return self.parse_play(raw, locale, drama_id)
 
-    def parse_play(self, raw, locale=''):
+    def parse_play(self, raw, locale='', drama_id=None):
         """把播放页 HTML 解析为渲染所需的数据字典"""
         doc = LH.fromstring(raw)
 
@@ -128,6 +154,7 @@ class FlickReelsCrawler:
 
         self._clean(doc, hls_url, locked, locale)
         self._inject_banner(doc, locale)
+        self._inject_like(doc, locale, drama_id)
 
         body = doc.body
         if body is None:
@@ -488,6 +515,64 @@ class FlickReelsCrawler:
         if main is None:
             return
         main.addprevious(LH.fragment_fromstring(self._reward_banner_html(locale)))
+
+    # ------------------------------------------------------ 点赞（引导下载）
+    @staticmethod
+    def _like_html(drama_id):
+        """信息面板里的「操作模块」：首个功能是点赞（爱心 + 数量）。
+        后续新增功能（收藏 / 分享 / 评分…）直接往这个容器里加即可。"""
+        n = like_count(drama_id or 0)
+        return (
+            '<div class="fr-actions" data-fr-actions '
+            'style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:14px 0 2px">'
+            '<button type="button" data-like-btn aria-label="like" '
+            'style="display:flex;align-items:center;gap:6px;padding:7px 14px;'
+            'border:1px solid #333;border-radius:9999px;background:#1f1f1f;color:#e5e5e5;'
+            'font-size:13px;font-weight:600;cursor:pointer">'
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="#ff4d6d" aria-hidden="true">'
+            '<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 '
+            '3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5'
+            'c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>'
+            f'<span data-like-count>{n:,}</span></button>'
+            '</div>'
+        )
+
+    @staticmethod
+    def _like_modal_html(locale):
+        """点击点赞后弹出的提示：需先下载 APP"""
+        c = LIKE_COPY.get(locale or 'en') or LIKE_COPY['en']
+        return (
+            '<div data-like-modal style="display:none;position:fixed;inset:0;z-index:3000;'
+            'background:rgba(0,0,0,.78);align-items:center;justify-content:center;padding:16px">'
+            '<div style="width:min(330px,86vw);background:#1c1c1c;border-radius:16px;'
+            'padding:26px 22px 14px;text-align:center;color:#fff">'
+            f'<div style="font-size:16px;font-weight:700;line-height:1.55">{c["hint"]}</div>'
+            f'<a href="{APP_URL_PLACEHOLDER}" target="_blank" rel="noopener" '
+            'style="display:flex;align-items:center;justify-content:center;margin:20px auto 0;'
+            'max-width:240px;height:46px;border-radius:9999px;'
+            'background:linear-gradient(270deg,#e58c00,#fcdb00);color:#333;font-weight:700;'
+            'font-size:15px;text-decoration:none">'
+            f'{c["cta"]}</a>'
+            '<button type="button" data-like-close style="margin-top:12px;border:0;'
+            'background:none;color:#8a8a8a;font-size:18px;line-height:1.4;cursor:pointer">✕</button>'
+            '</div></div>'
+        )
+
+    def _inject_like(self, doc, locale, drama_id):
+        """播放页：在右侧信息面板（info-panel-scroll）里新增「操作模块」，
+        首个功能为点赞按钮；点击后弹出"需先下载 APP"的提示弹窗。"""
+        panels = doc.xpath('//div[contains(@class,"info-panel-scroll")]')
+        if not panels or doc.body is None:
+            return
+        panel = panels[0]
+        module = LH.fragment_fromstring(self._like_html(drama_id))
+        # 放在标签行（row-scroll）之后，找不到就追加到面板末尾
+        tags = panel.xpath('.//div[contains(concat(" ",normalize-space(@class)," ")," row-scroll ")]')
+        if tags:
+            tags[0].addnext(module)
+        else:
+            panel.append(module)
+        doc.body.append(LH.fragment_fromstring(self._like_modal_html(locale)))
 
     def _clean(self, doc, hls_url, locked, locale):
         """清理页面：去脚本/注释、站内链接改相对、播放器注入播放地址、

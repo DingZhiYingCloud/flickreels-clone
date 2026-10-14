@@ -30,9 +30,32 @@
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initPlayer);
-  } else {
+  /* 点赞：点击后弹出"需先下载 APP 才能点赞"的提示弹窗 */
+  function initLike() {
+    var modal = document.querySelector('[data-like-modal]');
+    if (!modal) return;
+    var close = function () { modal.style.display = 'none'; };
+    document.querySelectorAll('[data-like-btn]').forEach(function (btn) {
+      btn.addEventListener('click', function () { modal.style.display = 'flex'; });
+    });
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal || (e.target.closest && e.target.closest('[data-like-close]'))) {
+        close();
+      }
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') close();
+    });
+  }
+
+  function boot() {
     initPlayer();
+    initLike();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
   }
 })();
