@@ -109,7 +109,7 @@ def like_count(drama_id):
 # 第 FREE_EPISODES+1 集起一律锁定（不下发播放地址，提示下载 App）。
 # 想调整免费集数，只改这一个数字即可。
 # ============================================================
-FREE_EPISODES = 5
+FREE_EPISODES = 3
 
 # 锁定集提示文案（按语言）
 LOCK_HINT = {
@@ -686,6 +686,8 @@ class FlickReelsCrawler:
             # 源站自带遮罩则改造它，否则（源站本可播放、由我们强制锁定）注入一个
             if not self._rewrite_lock_overlay(doc, locale):
                 self._inject_lock_overlay(doc, locale, poster)
+        # 剧集列表：超出免费集数的项一律置灰 + 小锁角标（不论当前打开的是第几集）
+        self._mark_locked_episodes(doc)
 
     @staticmethod
     def _rewrite_bottom_bar(doc):
@@ -830,3 +832,22 @@ class FlickReelsCrawler:
             '</div></div>'
         )
         boxes[0].append(LH.fragment_fromstring(html))
+
+    # 剧集列表里锁定项的角标（与源站锁定集同款式：小锁）
+    LOCK_BADGE_SVG = (
+        '<svg class="svg-icon absolute left-0 top-0 w-[1em] h-[1em] text-[1em]" '
+        'aria-hidden="true"><use xlink:href="#icon-unlock"></use></svg>'
+    )
+
+    def _mark_locked_episodes(self, doc, free=FREE_EPISODES):
+        """剧集列表：把超出免费集数的项置灰并加小锁角标，避免访客误以为还能继续看"""
+        for a in doc.xpath('//a[@data-episode-chapter-id]'):
+            m = re.search(r'/episode-(\d+)/?$', a.get('href') or '')
+            if not m or int(m.group(1)) <= free:
+                continue
+            if 'icon-unlock' in LH.tostring(a, encoding='unicode'):
+                continue  # 源站已标记过
+            cls = a.get('class') or ''
+            if 'text-[#6D6D6E]!' not in cls:
+                a.set('class', cls + ' text-[#6D6D6E]!')
+            a.append(LH.fragment_fromstring(self.LOCK_BADGE_SVG))
