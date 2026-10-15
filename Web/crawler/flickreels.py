@@ -104,6 +104,28 @@ def like_count(drama_id):
     return 10000 + h % (1000000 - 10000 + 1)
 
 
+# ============================================================
+# 免费集数策略：只有前 FREE_EPISODES 集对外开放，
+# 第 FREE_EPISODES+1 集起一律锁定（不下发播放地址，提示下载 App）。
+# 想调整免费集数，只改这一个数字即可。
+# ============================================================
+FREE_EPISODES = 5
+
+# 锁定集提示文案（按语言）
+LOCK_HINT = {
+    'en': 'Please download the APP to watch this episode',
+    'tc': '需要下載 APP 才能觀看這集',
+    'ja': 'このエピソードを見るにはアプリのダウンロードが必要です',
+    'ko': '이 에피소드를 보려면 앱을 다운로드해야 합니다',
+    'es': 'Descarga la APP para ver este episodio',
+    'id': 'Unduh APP untuk menonton episode ini',
+    'de': 'Bitte lade die APP herunter, um diese Episode anzusehen',
+    'th': 'ต้องดาวน์โหลดแอปก่อนจึงจะดูตอนนี้ได้',
+    'fr': "Téléchargez l'APP pour regarder cet épisode",
+    'pt': 'Baixe o APP para assistir a este episódio',
+}
+
+
 class FlickReelsCrawler:
     """FlickReels 内容爬虫"""
 
@@ -135,9 +157,9 @@ class FlickReelsCrawler:
     def fetch_play(self, locale, slug, drama_id, episode):
         """抓取并解析播放页"""
         raw = self.get(self.build_play_path(locale, slug, drama_id, episode))
-        return self.parse_play(raw, locale, drama_id)
+        return self.parse_play(raw, locale, drama_id, episode)
 
-    def parse_play(self, raw, locale='', drama_id=None):
+    def parse_play(self, raw, locale='', drama_id=None, episode=None):
         """把播放页 HTML 解析为渲染所需的数据字典"""
         doc = LH.fromstring(raw)
 
@@ -149,10 +171,14 @@ class FlickReelsCrawler:
         og_image = self._meta(doc, prop='og:image')
         hls_url = self._extract_hls(raw)
         poster = self._extract_poster(doc)
-        # 锁定集：源站不提供播放地址（无 m3u8、无 <video>），需下载 App 才能观看
-        locked = not hls_url
+        # 锁定判定：默认只放开前 FREE_EPISODES 集，其余强制锁定（引导下载 App）；
+        # 源站本身不提供播放地址的集数同样锁定。
+        over_free = episode is not None and int(episode) > FREE_EPISODES
+        locked = over_free or (not hls_url)
+        if locked:
+            hls_url = ''  # 锁定集不下发播放地址，避免被绕过
 
-        self._clean(doc, hls_url, locked, locale)
+        self._clean(doc, hls_url, locked, locale, poster=poster)
         self._inject_banner(doc, locale)
         self._inject_like(doc, locale, drama_id)
 
@@ -574,7 +600,7 @@ class FlickReelsCrawler:
             panel.append(module)
         doc.body.append(LH.fragment_fromstring(self._like_modal_html(locale)))
 
-    def _clean(self, doc, hls_url, locked, locale):
+    def _clean(self, doc, hls_url, locked, locale, poster=''):
         """清理页面：去脚本/注释、站内链接改相对、播放器注入播放地址、
         统一下载位置（底部推广条 / 导航 App / 锁定遮罩）"""
         for s in doc.xpath('//script'):
@@ -653,9 +679,13 @@ class FlickReelsCrawler:
         self._rewrite_bottom_bar(doc)
         # 板块 "More"（源站为无跳转 div）-> 改成指向同板块的链接
         self._linkify_more(doc)
-        # 锁定集遮罩 -> 二维码改为下载按钮
+        # 锁定集：移除播放器，并确保有"下载 App"遮罩
         if locked:
-            self._rewrite_lock_overlay(doc, locale)
+            for v in doc.xpath('//video'):
+                v.getparent().remove(v)
+            # 源站自带遮罩则改造它，否则（源站本可播放、由我们强制锁定）注入一个
+            if not self._rewrite_lock_overlay(doc, locale):
+                self._inject_lock_overlay(doc, locale, poster)
 
     @staticmethod
     def _rewrite_bottom_bar(doc):
@@ -716,10 +746,11 @@ class FlickReelsCrawler:
             btn.getparent().replace(btn, a)
 
     def _rewrite_lock_overlay(self, doc, locale):
-        """锁定集遮罩：移除二维码与品牌徽标，替换为"下载 App"按钮"""
+        """锁定集遮罩：移除二维码与品牌徽标，替换为"下载 App"按钮。
+        返回是否找到源站自带遮罩（False 表示需要自行注入）。"""
         overlays = doc.xpath('//div[contains(@class,"inset-0") and contains(@class,"bg-black/80")]')
         if not overlays:
-            return
+            return False
         overlay = overlays[0]
 
         # 移除二维码区块（含空 src 图片的 h-[200px] 容器）
@@ -761,3 +792,41 @@ class FlickReelsCrawler:
             f'<span>{label}</span></a>'
         )
         target.append(LH.fragment_fromstring(btn_html))
+        return True
+
+    def _inject_lock_overlay(self, doc, locale, poster=''):
+        """源站本可播放、但被我们强制锁定的集数：在播放器区域注入锁定遮罩
+        （封面做背景 + 促销标题 + 提示文案 + 下载按钮）"""
+        boxes = doc.xpath('//div[contains(concat(" ",normalize-space(@class)," ")," h-90 ")'
+                          ' and contains(@class,"bg-black")]')
+        if not boxes:
+            return
+        r = reward_copy(locale)
+        hint = LOCK_HINT.get(locale or 'en') or LOCK_HINT['en']
+        label = APP_DOWNLOAD_LABEL.get(locale or 'en', APP_DOWNLOAD_LABEL['en'])
+        bg = (f'background-image:url({poster});background-size:cover;'
+              'background-position:center;') if poster else ''
+        html = (
+            f'<div style="position:absolute;inset:0;z-index:30;display:flex;'
+            f'align-items:center;justify-content:center;{bg}">'
+            '<div style="position:absolute;inset:0;background:rgba(0,0,0,.82)"></div>'
+            '<div style="position:relative;width:268px;max-width:84%;padding:24px 18px;'
+            'text-align:center;color:#fff;background:#1c1c1c;border-radius:14px">'
+            f'<div style="font-weight:800;font-size:19px;color:#fcdb00;line-height:1.25">'
+            f'{r["title"]}</div>'
+            f'<div style="font-size:12px;color:rgba(255,255,255,.7);margin-top:4px">'
+            f'{r["sub"]}</div>'
+            f'<div style="font-size:15px;font-weight:600;line-height:1.5;margin-top:16px">'
+            f'{hint}</div>'
+            f'<a href="{APP_URL_PLACEHOLDER}" target="_blank" rel="noopener" '
+            'style="margin:22px auto 0;width:240px;max-width:100%;height:50px;'
+            'background:linear-gradient(270deg,#e58c00,#fcdb00);border-radius:9999px;'
+            'display:flex;align-items:center;justify-content:center;font-weight:600;'
+            'font-size:.95rem;color:#333;text-decoration:none">'
+            '<svg width="18" height="18" viewBox="0 0 14.375 14.688" fill="currentColor" '
+            'aria-hidden="true" style="margin-right:.5rem;flex:none">'
+            '<use xlink:href="#icon-download"></use></svg>'
+            f'<span>{label}</span></a>'
+            '</div></div>'
+        )
+        boxes[0].append(LH.fragment_fromstring(html))
