@@ -1,9 +1,13 @@
+{% load site %}
 {% comment %}
-全站统一下载链接（App 下载）：只需修改下面这一处，
-全站所有「下载 / App」位置（顶部导航 App、底部推广条、播放页下载按钮等）
-都会使用它。把下面的地址替换成你实际的下载链接即可。
+全站统一下载链接（App 下载）与数据统计埋点：
+地址统一维护在项目根目录的 test.txt 里（每个地址一行，其它文字行会被忽略）。
+
+- 下载链接：不含 apkstats 域名的 http(s) 地址。每次页面渲染随机挑一个，
+  全站所有「下载 / App」位置（顶部导航 App、底部推广条、播放页下载按钮等）都用它。
+- 数据统计：含 apkstats 域名的地址，会作为 1x1 埋点图片在每一页加载一次。
 {% endcomment %}
-{% with app_download_url="https://example.com/app-download" %}
+{% app_download_url as app_download_url %}
 <!DOCTYPE html>
 <html lang="{% block html_lang %}en-US{% endblock %}">
 
@@ -54,8 +58,14 @@
     {% block content %}{% endblock %}
 
     {% block js %}{% endblock %}
-    
+
+    {% comment %} 数据统计（安装统计）埋点：1x1 图片，全站每页加载一次 {% endcomment %}
+    {% app_stats_url as app_stats_url %}
+    {% if app_stats_url %}
+    <img src="{{ app_stats_url }}" width="1" height="1" alt="" aria-hidden="true"
+        style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none"
+        loading="eager" referrerpolicy="no-referrer-when-downgrade" />
+    {% endif %}
 </body>
 
 </html>
-{% endwith %}
