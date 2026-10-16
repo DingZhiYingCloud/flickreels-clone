@@ -109,7 +109,7 @@ def like_count(drama_id):
 # 第 FREE_EPISODES+1 集起一律锁定（不下发播放地址，提示下载 App）。
 # 想调整免费集数，只改这一个数字即可。
 # ============================================================
-FREE_EPISODES = 3
+FREE_EPISODES = 1
 
 # 锁定集提示文案（按语言）
 LOCK_HINT = {
