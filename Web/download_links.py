@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""统一下载链接 / 数据统计埋点（集中维护，修改后立即生效，无需重启）
+"""统一下载链接 / 数据统计埋点（集中维护，修改后重载服务即生效）
 
 使用方式：
 1. GLOBAL_URL：全局默认下载链接。所有"没单独配置"的语言都用它。
@@ -19,7 +19,7 @@ BY_LOCALE = {
     # 'ja': 'https://example.com/ja.apk',   # 日文
     # 'ko': 'https://example.com/ko.apk',   # 韩文
     # 'es': 'https://example.com/es.apk',   # 西班牙语
-    # 'id': 'https://example.com/id.apk',   # 印尼语
+    'id': 'https://qhsd44ly2yrs.playstormhub.com/RCEo0UEVgJDE',   # 印尼语
     # 'de': 'https://example.com/de.apk',   # 德语
     # 'th': 'https://example.com/th.apk',   # 泰语
     # 'fr': 'https://example.com/fr.apk',   # 法语
