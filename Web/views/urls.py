@@ -1,6 +1,5 @@
 # 项目URL配置
 from django.urls import path
-from django.views.generic import TemplateView
 
 from Web.views import request
 
@@ -12,10 +11,16 @@ urlpatterns = [
     path('index/', request.index, name='index'),
 ]
 
-# 各语言首页路由，如 /ja/、/ko/ ...
+# 各语言首页路由，如 /ja/、/ko/ ...（手机端由 index 内部按 UA 分流到 V2）
 urlpatterns += [
-    path(f'{loc}/', TemplateView.as_view(template_name=f'locales/{loc}.html'), name=f'locale_{loc}')
+    path(f'{loc}/', request.index, {'locale': loc}, name=f'locale_{loc}')
     for loc in LOCALES
+]
+
+# V2 竖屏视频流接口（无限下滑加载 + 按需解析第 1 集播放地址）
+urlpatterns += [
+    path('api/v2/feed', request.api_feed, name='api_v2_feed'),
+    path('api/v2/ep1', request.api_ep1, name='api_v2_ep1'),
 ]
 
 # 短剧播放页：/playlist/<slug>/<id>/episode-<n>（英文）及各语言前缀版本

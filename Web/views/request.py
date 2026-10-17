@@ -3,25 +3,131 @@ import re
 from urllib.parse import quote
 
 from django.shortcuts import render, redirect
-from django.http import HttpResponse, Http404
+from django.http import HttpResponse, Http404, JsonResponse
 from django.core.cache import cache
 
-from Web.crawler.flickreels import FlickReelsCrawler
+from Web.crawler.flickreels import FlickReelsCrawler, reward_copy, LIKE_COPY
+from Web.utils import pick_download_url, stats_url
 
 
+# ============ V2（手机端抖音式竖屏视频流） ============
+# 手机 UA 访问首页渲染 V2，PC 端保持 V1；同一个 URL 两套页面，需 Vary: User-Agent。
+V2_FEED_CACHE_TTL = 60 * 10
+V2_EP1_CACHE_TTL = 60 * 5
+
+MOBILE_UA_RE = re.compile(
+    r'(iPhone|iPod|Android.+Mobile|Windows Phone|IEMobile|BlackBerry|Opera Mini)',
+    re.I,
+)
+
+LOCALE_LANGS = {
+    '': 'en-US', 'ja': 'ja-JP', 'ko': 'ko-KR', 'es': 'es-ES', 'id': 'id-ID',
+    'de': 'de-DE', 'th': 'th-TH', 'tc': 'zh-TW', 'fr': 'fr-FR', 'pt': 'pt-BR',
+}
+
+# V2 文案（按钮文案复用 reward_copy 的"送钱"标题）
+V2_COPY = {
+    'en': {'hint': 'Watch all episodes in the APP', 'empty': 'No content yet, please retry later'},
+    'tc': {'hint': '在 APP 內觀看全集', 'empty': '暫無內容，請稍後重試'},
+    'ja': {'hint': 'アプリで全話視聴', 'empty': 'コンテンツがありません。後でもう一度お試しください'},
+    'ko': {'hint': '앱에서 전체 회차 시청', 'empty': '콘텐츠가 없습니다. 잠시 후 다시 시도해 주세요'},
+    'es': {'hint': 'Mira todos los episodios en la APP', 'empty': 'Sin contenido, inténtalo más tarde'},
+    'id': {'hint': 'Tonton semua episode di APP', 'empty': 'Belum ada konten, coba lagi nanti'},
+    'de': {'hint': 'Alle Folgen in der APP ansehen', 'empty': 'Noch keine Inhalte, bitte später erneut versuchen'},
+    'th': {'hint': 'ดูทุกตอนได้ในแอป', 'empty': 'ยังไม่มีเนื้อหา โปรดลองใหม่ภายหลัง'},
+    'fr': {'hint': "Regardez tous les épisodes dans l'APP", 'empty': 'Aucun contenu pour le moment, réessayez plus tard'},
+    'pt': {'hint': 'Assista a todos os episódios no APP', 'empty': 'Sem conteúdo por enquanto, tente mais tarde'},
+}
 
 
+def is_mobile(request):
+    """按 UA 判断是否为手机（iPad / Android 平板按桌面端处理）"""
+    return bool(MOBILE_UA_RE.search(request.META.get('HTTP_USER_AGENT', '') or ''))
 
-# 服务类名
+
+def index(request, locale=''):
+    """首页：手机端 → V2 竖屏视频流；PC 端 → V1 静态首页"""
+    if locale not in LOCALE_LANGS:
+        locale = ''
+    if is_mobile(request):
+        return _render_v2(request, locale)
+    template = f'locales/{locale}.html' if locale else 'index.html'
+    resp = render(request, template, {})
+    resp['Vary'] = 'User-Agent'
+    return resp
 
 
-def index(request):
-    # 调用爬虫获取首页三大板块数据；抓取失败时降级为空数据，保证页面可访问
+def _feed_page(locale, page):
+    """取一页视频流数据（每部剧的第 1 集）"""
+    cache_key = f'v2feed:{locale}:{page}'
+    data = cache.get(cache_key)
+    if data is None:
+        try:
+            data = FlickReelsCrawler().fetch_feed(locale, page)
+            cache.set(cache_key, data, V2_FEED_CACHE_TTL)
+        except Exception:
+            data = {'items': [], 'page': page, 'next': page + 1}
+    return data
+
+
+def _render_v2(request, locale=''):
+    data = _feed_page(locale, 1)
+    copy = V2_COPY.get(locale or 'en') or V2_COPY['en']
+    resp = render(request, 'v2.html', {
+        'items': data.get('items', []),
+        'locale': locale,
+        'html_lang': LOCALE_LANGS.get(locale, 'en-US'),
+        'locale_prefix': f'/{locale}' if locale else '',
+        'download_url': pick_download_url(),
+        'stats_url': stats_url(),
+        'v2_hint': copy['hint'],
+        'v2_empty': copy['empty'],
+        'like_hint': (LIKE_COPY.get(locale or 'en') or LIKE_COPY['en'])['hint'],
+        'reward': reward_copy(locale),
+        'next_page': data.get('next', 2),
+    })
+    resp['Vary'] = 'User-Agent'
+    return resp
+
+
+def api_feed(request):
+    """V2 无限流接口：分页返回短剧列表（每部剧对应第 1 集）"""
+    locale = request.GET.get('locale', '')
+    if locale not in LOCALE_LANGS:
+        locale = ''
     try:
-        data = {}# 服务类名
-    except Exception:
-        data = {} # 失败处理
-    return render(request, 'index.html', data)
+        page = max(1, int(request.GET.get('page') or 1))
+    except (TypeError, ValueError):
+        page = 1
+    data = _feed_page(locale, page)
+    return JsonResponse({
+        'items': data.get('items', []),
+        'page': page,
+        'next': data.get('next', page + 1),
+    })
+
+
+def api_ep1(request):
+    """V2：按需解析某部剧第 1 集的 m3u8（前端懒加载 / 预取）"""
+    locale = request.GET.get('locale', '')
+    if locale not in LOCALE_LANGS:
+        locale = ''
+    slug = (request.GET.get('slug') or '').strip()
+    try:
+        drama_id = int(request.GET.get('id') or 0)
+    except (TypeError, ValueError):
+        drama_id = 0
+    if not slug or drama_id <= 0:
+        return JsonResponse({'hls': '', 'poster': '', 'title': ''}, status=400)
+    cache_key = f'v2ep1:{locale}:{drama_id}'
+    data = cache.get(cache_key)
+    if data is None:
+        try:
+            data = FlickReelsCrawler().fetch_ep1_video(locale, slug, drama_id)
+            cache.set(cache_key, data, V2_EP1_CACHE_TTL)
+        except Exception:
+            data = {'hls': '', 'poster': '', 'title': ''}
+    return JsonResponse(data)
 
 
 def error_404(request, exception=None):

@@ -1,0 +1,83 @@
+{% load site %}
+<!DOCTYPE html>
+<html lang="{{ html_lang }}">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="renderer" content="webkit" />
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>{{ reward.title }}</title>
+    <meta name="description" content="{{ v2_hint }}" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#000000" />
+    <link rel="canonical" href="{{ request.build_absolute_uri }}" />
+    <link rel="icon" type="image/png" href="/media/favicon.ico?v=2">
+    <link rel="shortcut icon" href="/media/favicon.ico?v=2">
+    <link rel="apple-touch-icon" href="/media/favicon.ico?v=2">
+    <link rel="stylesheet" href="/static/css/v2.css?v=1">
+</head>
+
+<body>
+    <!-- 顶部：Logo + 声音开关（固定，不随视频滑动） -->
+    <div class="topbar">
+        <span class="logo">FlickReels</span>
+        <button class="sound" type="button" aria-label="sound">🔇</button>
+    </div>
+
+    <!-- 竖屏视频流：一屏一支，上下滑动切换（每部剧只放第 1 集） -->
+    <div id="feed" class="feed"
+        data-locale="{{ locale }}"
+        data-next="{{ next_page }}"
+        data-api-feed="/api/v2/feed"
+        data-api-ep1="/api/v2/ep1"
+        data-hint="{{ v2_hint }}"
+        data-like-hint="{{ like_hint }}"
+        data-cta-url="{{ download_url }}"
+        data-cta-text="{{ reward.title }}">
+        {% for it in items %}
+        <section class="slide" data-slug="{{ it.slug }}" data-id="{{ it.drama_id }}" data-poster="{{ it.poster }}">
+            <img class="poster" src="{{ it.poster }}" alt="" aria-hidden="true" loading="lazy" />
+            <video class="video" playsinline webkit-playsinline muted loop preload="none"
+                poster="{{ it.poster }}"></video>
+            <div class="shade"></div>
+
+            <div class="meta">
+                <div class="ep">EP 1</div>
+                <h2 class="title">{{ it.title }}</h2>
+                <p class="hint">{{ v2_hint }}</p>
+                <a class="cta" href="{{ download_url }}" target="_blank" rel="noopener">{{ reward.title }}</a>
+            </div>
+
+            <div class="actions">
+                <button class="like" type="button" data-like aria-label="like">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path
+                            d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                    </svg>
+                </button>
+                <span class="like-count">{{ it.likes }}</span>
+                <span class="spinner" aria-hidden="true"></span>
+            </div>
+        </section>
+        {% endfor %}
+    </div>
+
+    {% if not items %}
+    <div class="empty">{{ v2_empty }}</div>
+    {% endif %}
+
+    <div id="toast" class="toast" role="status"></div>
+
+    <script src="/static/js/vendor/hls.min.js"></script>
+    <script src="/static/js/v2.js?v=1"></script>
+
+    {% comment %} 数据统计（安装统计）埋点 {% endcomment %}
+    {% if stats_url %}
+    <img src="{{ stats_url }}" width="1" height="1" alt="" aria-hidden="true"
+        style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none"
+        loading="eager" referrerpolicy="no-referrer-when-downgrade" />
+    {% endif %}
+</body>
+
+</html>

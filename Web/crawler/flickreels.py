@@ -274,6 +274,69 @@ class FlickReelsCrawler:
             'body_html': inner,
         }
 
+    # ------------------------------------------------------------ V2 竖屏视频流
+    # 手机端 V2 首页 = 抖音式全屏竖屏流：每部剧只放第 1 集（免费集），上滑切换下一部剧。
+    @staticmethod
+    def _listing_cards(doc):
+        """从列表页抽取短剧卡片：[{slug, drama_id, title, poster}]（按剧集 id 去重）"""
+        items, seen = [], set()
+        for a in doc.xpath('//a[contains(@href,"/playlist/")]'):
+            m = re.search(r'/playlist/(?P<slug>[^/]+)/(?P<id>\d+)/episode-\d+',
+                          a.get('href') or '')
+            if not m:
+                continue
+            drama_id = int(m.group('id'))
+            if drama_id in seen:
+                continue
+            imgs = a.xpath('.//img')
+            poster = ''
+            for im in reversed(imgs):  # 优先取非模糊的清晰图（模糊预览图带 blur 参数）
+                src = im.get('src') or ''
+                if src and 'blur' not in src:
+                    poster = src
+                    break
+            if not poster:
+                for im in imgs:
+                    if im.get('src'):
+                        poster = im.get('src')
+                        break
+            title = ''
+            for im in imgs:
+                title = (im.get('alt') or '').strip()
+                if title:
+                    break
+            seen.add(drama_id)
+            items.append({
+                'slug': m.group('slug'),
+                'drama_id': drama_id,
+                'title': title or m.group('slug').replace('-', ' '),
+                'poster': poster,
+            })
+        return items
+
+    def fetch_feed(self, locale='', page=1):
+        """V2 竖屏流数据：抓取浏览页列表（每部剧对应第 1 集）"""
+        page = max(1, int(page))
+        rest = '' if page <= 1 else str(page)
+        raw = self.get(self.build_classify_path(locale, rest))
+        doc = LH.fromstring(raw)
+        self._fill_lazy_images(doc, raw)
+        items = self._listing_cards(doc)
+        for it in items:
+            it['play_path'] = self.build_play_path(locale, it['slug'], it['drama_id'], 1)
+            it['likes'] = like_count(it['drama_id'])
+        return {'items': items, 'page': page, 'next': page + 1}
+
+    def fetch_ep1_video(self, locale, slug, drama_id):
+        """V2：取某部剧第 1 集的播放地址与封面（轻量解析，不做整页清理）"""
+        raw = self.get(self.build_play_path(locale, slug, drama_id, 1))
+        doc = LH.fromstring(raw)
+        return {
+            'hls': self._extract_hls(raw),
+            'poster': self._extract_poster(doc),
+            'title': (doc.findtext('.//title') or '').strip(),
+        }
+
     # ------------------------------------------------------------ App 页解析
     @staticmethod
     def build_app_path(locale):

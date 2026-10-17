@@ -1,0 +1,257 @@
+/* ==========================================================================
+   V2：手机端抖音式竖屏视频流（仅手机 UA 使用；PC 端仍走 V1）
+   ========================================================================== */
+* {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+    background: #000;
+    color: #fff;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ---------------- 视频流容器：整屏 + 强制一屏一支 ---------------- */
+.feed {
+    height: 100vh;
+    height: 100dvh;
+    overflow-y: scroll;
+    overflow-x: hidden;
+    scroll-snap-type: y mandatory;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    scrollbar-width: none;
+}
+
+.feed::-webkit-scrollbar {
+    display: none;
+}
+
+.slide {
+    position: relative;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    background: #000;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+}
+
+/* 封面（模糊放大做背景，避免视频未加载时黑屏） */
+.poster {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: blur(16px);
+    transform: scale(1.1);
+    opacity: .55;
+}
+
+.video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: #000;
+}
+
+/* 上下渐变压暗，保证文字可读 */
+.shade {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(180deg,
+            rgba(0, 0, 0, .55) 0%,
+            rgba(0, 0, 0, 0) 20%,
+            rgba(0, 0, 0, 0) 52%,
+            rgba(0, 0, 0, .88) 100%);
+}
+
+/* ---------------- 顶部：Logo + 声音 ---------------- */
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: calc(env(safe-area-inset-top, 0px) + 12px) 14px 0;
+    pointer-events: none;
+}
+
+.logo {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: .3px;
+    opacity: .92;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+}
+
+.sound {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, .45);
+    color: #fff;
+    font-size: 15px;
+    line-height: 34px;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* ---------------- 底部信息 + 下载引导 ---------------- */
+.meta {
+    position: absolute;
+    left: 0;
+    right: 78px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+    padding: 0 16px;
+}
+
+.ep {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    border: 1px solid rgba(252, 219, 0, .35);
+    background: rgba(252, 219, 0, .16);
+    color: #fcdb00;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .5px;
+}
+
+.title {
+    margin: 8px 0 4px;
+    font-size: 17px;
+    line-height: 1.4;
+    font-weight: 700;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .6);
+}
+
+.hint {
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, .66);
+}
+
+.cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 100%;
+    padding: 10px 16px;
+    border-radius: 9999px;
+    background: linear-gradient(270deg, #e58c00, #fcdb00);
+    color: #333;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    box-shadow: 0 4px 16px rgba(252, 219, 0, .25);
+}
+
+/* ---------------- 右侧操作区 ---------------- */
+.actions {
+    position: absolute;
+    right: 12px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 30px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.like {
+    width: 46px;
+    height: 46px;
+    padding: 11px;
+    border: 0;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, .45);
+    color: #ff4d6d;
+    cursor: pointer;
+}
+
+.like svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.like-count {
+    font-size: 11px;
+    color: rgba(255, 255, 255, .8);
+}
+
+.spinner {
+    width: 18px;
+    height: 18px;
+    margin-top: 2px;
+    border: 2px solid rgba(255, 255, 255, .25);
+    border-top-color: #fcdb00;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity .2s;
+    animation: v2-spin .8s linear infinite;
+}
+
+.slide.is-loading .spinner {
+    opacity: 1;
+}
+
+@keyframes v2-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ---------------- 提示 toast ---------------- */
+.toast {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    z-index: 30;
+    max-width: 78vw;
+    padding: 12px 18px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, .86);
+    color: #fff;
+    font-size: 14px;
+    line-height: 1.5;
+    text-align: center;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(.96);
+    pointer-events: none;
+    transition: opacity .18s, transform .18s;
+}
+
+.toast.is-show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+/* ---------------- 空状态 ---------------- */
+.empty {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    color: #8a8a8a;
+    font-size: 14px;
+    padding: 24px;
+    text-align: center;
+}
