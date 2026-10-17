@@ -25,6 +25,82 @@ LOCALE_LANGS = {
     'de': 'de-DE', 'th': 'th-TH', 'tc': 'zh-TW', 'fr': 'fr-FR', 'pt': 'pt-BR',
 }
 
+# Accept-Language → 站内语言代码（站内只提供繁体中文，zh-* 统一归到 tc）
+ACCEPT_LANG_ALIASES = {
+    'ja': 'ja', 'ko': 'ko', 'es': 'es', 'id': 'id', 'de': 'de',
+    'th': 'th', 'fr': 'fr', 'pt': 'pt',
+    'zh': 'tc', 'zh-tw': 'tc', 'zh-hk': 'tc', 'zh-hant': 'tc',
+}
+
+
+def _accept_languages(request):
+    """按 q 值从高到低解析 Accept-Language，返回语言标签列表"""
+    raw = request.META.get('HTTP_ACCEPT_LANGUAGE', '') or ''
+    items = []
+    for part in raw.split(','):
+        bits = part.strip().split(';')
+        tag = bits[0].strip().lower()
+        if not tag:
+            continue
+        q = 1.0
+        for b in bits[1:]:
+            b = b.strip()
+            if b.startswith('q='):
+                try:
+                    q = float(b[2:])
+                except ValueError:
+                    q = 0.0
+        if q > 0:
+            items.append((q, tag))
+    items.sort(key=lambda x: x[0], reverse=True)
+    return [tag for _, tag in items]
+
+
+def detect_locale(request):
+    """按浏览器语言选择站内语言；没匹配到（或首选英语）返回 ''，即英文"""
+    for tag in _accept_languages(request):
+        base = tag.split('-')[0]
+        if base == 'en':
+            return ''
+        if tag in ACCEPT_LANG_ALIASES:
+            return ACCEPT_LANG_ALIASES[tag]
+        if base in ACCEPT_LANG_ALIASES:
+            return ACCEPT_LANG_ALIASES[base]
+    return ''
+
+
+def is_mobile(request):
+    """按 UA 判断是否为手机（iPad / Android 平板按桌面端处理）"""
+    return bool(MOBILE_UA_RE.search(request.META.get('HTTP_USER_AGENT', '') or ''))
+
+
+def index(request, locale=''):
+    """首页：手机端 → V2 竖屏视频流；PC 端 → V1 静态首页
+
+    - 根路径（/、/index/）按浏览器 Accept-Language 自动跳转到对应语言
+    - /en/ 是显式英文入口，不会被自动跳转覆盖（语言下拉里的 English）
+    - 其它情况默认英文
+    """
+    if locale == 'en':
+        locale = ''
+    elif locale not in LOCALE_LANGS:
+        locale = ''
+
+    if not locale and request.path not in ('/en', '/en/'):
+        target = detect_locale(request)
+        if target:
+            resp = redirect(f'/{target}/')
+            resp['Vary'] = 'Accept-Language'
+            return resp
+
+    if is_mobile(request):
+        return _render_v2(request, locale)
+    template = f'locales/{locale}.html' if locale else 'index.html'
+    resp = render(request, template, {})
+    resp['Vary'] = 'User-Agent, Accept-Language'
+    return resp
+
+
 # V2 文案（按钮文案复用 reward_copy 的"送钱"标题）
 V2_COPY = {
     'en': {'hint': 'Watch all episodes in the APP', 'empty': 'No content yet, please retry later',
@@ -48,23 +124,6 @@ V2_COPY = {
     'pt': {'hint': 'Assista a todos os episódios no APP', 'empty': 'Sem conteúdo por enquanto, tente mais tarde',
            'more': 'Ver mais episódios'},
 }
-
-
-def is_mobile(request):
-    """按 UA 判断是否为手机（iPad / Android 平板按桌面端处理）"""
-    return bool(MOBILE_UA_RE.search(request.META.get('HTTP_USER_AGENT', '') or ''))
-
-
-def index(request, locale=''):
-    """首页：手机端 → V2 竖屏视频流；PC 端 → V1 静态首页"""
-    if locale not in LOCALE_LANGS:
-        locale = ''
-    if is_mobile(request):
-        return _render_v2(request, locale)
-    template = f'locales/{locale}.html' if locale else 'index.html'
-    resp = render(request, template, {})
-    resp['Vary'] = 'User-Agent'
-    return resp
 
 
 def _feed_page(locale, page):

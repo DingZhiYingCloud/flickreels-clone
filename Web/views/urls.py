@@ -9,6 +9,8 @@ LOCALES = ['ja', 'ko', 'es', 'id', 'de', 'th', 'tc', 'fr', 'pt']
 urlpatterns = [
     path('', request.index, name='home'),
     path('index/', request.index, name='index'),
+    # 显式英文入口（语言下拉里的 English 指向这里，避免被自动语言跳转弹回）
+    path('en/', request.index, {'locale': 'en'}, name='locale_en'),
 ]
 
 # 各语言首页路由，如 /ja/、/ko/ ...（手机端由 index 内部按 UA 分流到 V2）
