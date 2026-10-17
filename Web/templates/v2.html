@@ -15,7 +15,13 @@
     <link rel="icon" type="image/png" href="/media/favicon.ico?v=2">
     <link rel="shortcut icon" href="/media/favicon.ico?v=2">
     <link rel="apple-touch-icon" href="/media/favicon.ico?v=2">
-    <link rel="stylesheet" href="/static/css/v2.css?v=1">
+    <link rel="stylesheet" href="/static/css/v2.css?v=2">
+
+    <!-- 51LA 数据统计（V2 与 V1 共用同一站点 ID） -->
+    <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
+    <script>
+        LA.init({ id: "3RWwY2JU9rDHAEcD", ck: "3RWwY2JU9rDHAEcD", autoTrack: true, hashMode: true, screenRecord: true })
+    </script>
 </head>
 
 <body>
@@ -32,6 +38,8 @@
         data-api-feed="/api/v2/feed"
         data-api-ep1="/api/v2/ep1"
         data-hint="{{ v2_hint }}"
+        data-empty="{{ v2_empty }}"
+        data-more="{{ v2_more }}"
         data-like-hint="{{ like_hint }}"
         data-cta-url="{{ download_url }}"
         data-cta-text="{{ reward.title }}">
@@ -46,14 +54,18 @@
                 <div class="ep">EP 1</div>
                 <h2 class="title">{{ it.title }}</h2>
                 <p class="hint">{{ v2_hint }}</p>
-                <a class="cta" href="{{ download_url }}" target="_blank" rel="noopener">{{ reward.title }}</a>
+                <div class="meta-actions">
+                    <a class="cta" href="{{ download_url }}" target="_blank" rel="noopener">{{ reward.title }}</a>
+                    <button class="more-btn" type="button" data-more>{{ v2_more }}</button>
+                </div>
             </div>
 
             <div class="actions">
+                <!-- 点赞：默认未点赞，点击弹出下载 App 弹窗 -->
                 <button class="like" type="button" data-like aria-label="like">
                     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                         <path
-                            d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                            d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z" />
                     </svg>
                 </button>
                 <span class="like-count">{{ it.likes }}</span>
@@ -67,10 +79,39 @@
     <div class="empty">{{ v2_empty }}</div>
     {% endif %}
 
+    <!-- 点击屏幕的播放/暂停提示 -->
+    <div class="play-hint" id="play-hint" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z" />
+        </svg>
+    </div>
+
+    <!-- 点赞 → 下载 App 弹窗 -->
+    <div class="modal" id="like-modal" hidden>
+        <div class="modal-mask" data-close></div>
+        <div class="modal-box">
+            <div class="modal-title">{{ like_hint }}</div>
+            <a class="modal-cta" href="{{ download_url }}" target="_blank" rel="noopener">{{ reward.title }}</a>
+            <button class="modal-close" type="button" data-close aria-label="close">✕</button>
+        </div>
+    </div>
+
+    <!-- 查看更多集数（底部抽屉，全部上锁） -->
+    <div class="sheet" id="ep-sheet" hidden>
+        <div class="sheet-mask" data-close></div>
+        <div class="sheet-box">
+            <div class="sheet-head">
+                <span class="sheet-title">{{ v2_more }}</span>
+                <button class="sheet-close" type="button" data-close aria-label="close">✕</button>
+            </div>
+            <div class="sheet-body" id="sheet-body"></div>
+        </div>
+    </div>
+
     <div id="toast" class="toast" role="status"></div>
 
     <script src="/static/js/vendor/hls.min.js"></script>
-    <script src="/static/js/v2.js?v=1"></script>
+    <script src="/static/js/v2.js?v=3"></script>
 
     {% comment %} 数据统计（安装统计）埋点 {% endcomment %}
     {% if stats_url %}

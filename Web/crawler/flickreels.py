@@ -328,13 +328,24 @@ class FlickReelsCrawler:
         return {'items': items, 'page': page, 'next': page + 1}
 
     def fetch_ep1_video(self, locale, slug, drama_id):
-        """V2：取某部剧第 1 集的播放地址与封面（轻量解析，不做整页清理）"""
+        """V2：取某部剧第 1 集的播放地址、封面与总集数（轻量解析，不做整页清理）"""
         raw = self.get(self.build_play_path(locale, slug, drama_id, 1))
         doc = LH.fromstring(raw)
+        # 总集数：优先取剧集列表标题旁的 "N 集 / N Episodes" 数字，兜底取最大集号
+        episodes = 0
+        for a in doc.xpath('//a[contains(@href,"/episodes-list/")]'):
+            m = re.search(r'(\d+)', a.text_content() or '')
+            if m:
+                episodes = int(m.group(1))
+                break
+        if not episodes:
+            nums = [int(n) for n in re.findall(r'/episode-(\d+)', raw)]
+            episodes = max(nums) if nums else 1
         return {
             'hls': self._extract_hls(raw),
             'poster': self._extract_poster(doc),
             'title': (doc.findtext('.//title') or '').strip(),
+            'episodes': episodes,
         }
 
     # ------------------------------------------------------------ App 页解析

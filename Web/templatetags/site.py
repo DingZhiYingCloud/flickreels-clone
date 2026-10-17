@@ -19,13 +19,20 @@ def app_link(html, url):
     return html.replace(APP_URL_PLACEHOLDER, url or '#')
 
 
-@register.simple_tag
-def app_download_url():
-    """全站统一下载链接：每次渲染从 test.txt 里随机挑一个
+@register.simple_tag(takes_context=True)
+def app_download_url(context):
+    """全站统一下载链接（按当前页面语言自动选择：语言配置 > 全局默认）
 
     用法：{% app_download_url as app_download_url %}
     """
-    return pick_download_url()
+    try:
+        request = context['request']
+    except KeyError:
+        request = None
+    path = (request.path if request is not None else '') or ''
+    # 路径首段即语言代码（如 /tc/playlist/... → tc；根路径 → ''）
+    locale = path.strip('/').split('/')[0]
+    return pick_download_url(locale)
 
 
 @register.simple_tag

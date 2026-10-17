@@ -2,6 +2,7 @@
    V2：手机端竖屏视频流
    - 一屏一支，上下滑动切换（CSS scroll-snap）
    - 进入哪一支就播哪一支，并预取后面 2 支的播放地址
+   - 点屏幕播放/暂停；点赞/查看更多集数 → 引导下载 App
    - 滑到接近底部自动加载下一页
    ========================================================================== */
 (function () {
@@ -14,7 +15,8 @@
   var apiFeed = feed.dataset.apiFeed || '/api/v2/feed';
   var apiEp1 = feed.dataset.apiEp1 || '/api/v2/ep1';
   var hint = feed.dataset.hint || '';
-  var likeHint = feed.dataset.likeHint || '';
+  var emptyText = feed.dataset.empty || '';
+  var moreText = feed.dataset.more || 'More';
   var ctaUrl = feed.dataset.ctaUrl || '#';
   var ctaText = feed.dataset.ctaText || '';
 
@@ -24,10 +26,14 @@
   var muted = true;
   var currentIndex = -1;
 
-  var HEART =
-    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 ' +
-    '15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 ' +
-    '22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>';
+  var THUMB_SVG =
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M1 21h4V9H1v12zm22-11c0-1.1-.9-2-2-2h-6.31' +
+    'l.95-4.57.03-.32c0-.41-.17-.79-.44-1.06L14.17 1 7.59 7.59C7.22 7.95 7 8.45 7 9v10c0 1.1.9 2 2 2h9' +
+    'c.83 0 1.54-.5 1.84-1.22l3.02-7.05c.09-.23.14-.47.14-.73v-2z"/></svg>';
+
+  var LOCK_SVG =
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8' +
+    'a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 0 1 6 0v3H9z"/></svg>';
 
   function slides() {
     return Array.prototype.slice.call(feed.querySelectorAll('.slide'));
@@ -52,6 +58,60 @@
     }, 1800);
   }
 
+  /* ---------------- 弹层 ---------------- */
+  var likeModal = document.getElementById('like-modal');
+  var epSheet = document.getElementById('ep-sheet');
+  var sheetBody = document.getElementById('sheet-body');
+
+  function openLikeModal() {
+    if (likeModal) likeModal.hidden = false;
+  }
+  function closeLayer(el) {
+    if (el) el.hidden = true;
+  }
+
+  [likeModal, epSheet].forEach(function (layer) {
+    if (!layer) return;
+    layer.addEventListener('click', function (e) {
+      var t = e.target;
+      if (t && t.hasAttribute && t.hasAttribute('data-close')) closeLayer(layer);
+    });
+  });
+
+  if (sheetBody) {
+    sheetBody.addEventListener('click', function (e) {
+      var item = e.target.closest ? e.target.closest('[data-ep]') : null;
+      if (item) openLikeModal();
+    });
+  }
+
+  /* ---------------- 播放/暂停提示 ---------------- */
+  var playHint = document.getElementById('play-hint');
+
+  function currentSlide() {
+    var list = slides();
+    return list[currentIndex] || list[0] || null;
+  }
+
+  function updatePlayHint() {
+    var s = currentSlide();
+    var v = s ? s.querySelector('video') : null;
+    if (playHint) playHint.classList.toggle('is-show', !!v && v.paused);
+  }
+
+  function togglePlay() {
+    var s = currentSlide();
+    var v = s ? s.querySelector('video') : null;
+    if (!v) return;
+    if (v.paused) {
+      var p = v.play();
+      if (p && p.catch) p.catch(function () {});
+    } else {
+      v.pause();
+    }
+    updatePlayHint();
+  }
+
   /* ---------------- 加载某一支的播放地址（懒加载 + 预取共用） ---------------- */
   function ensureLoaded(slide) {
     if (!slide) return Promise.resolve(null);
@@ -68,6 +128,7 @@
         if (!d || !d.hls) return null;
         var v = slide.querySelector('video');
         if (d.poster && v) v.setAttribute('poster', d.poster);
+        if (d.episodes) slide.dataset.episodes = d.episodes;
         return d.hls;
       })
       .catch(function () {
@@ -96,6 +157,7 @@
       }
       var p = v.play();
       if (p && p.catch) p.catch(function () {});
+      updatePlayHint();
     });
   }
 
@@ -108,6 +170,7 @@
     ensureLoaded(list[index + 1]);
     ensureLoaded(list[index + 2]);
     if (index >= list.length - 2) loadMore();
+    updatePlayHint();
   }
 
   /* ---------------- 可见性观察 ---------------- */
@@ -129,6 +192,31 @@
 
   function observe(slide) {
     observer.observe(slide);
+  }
+
+  /* ---------------- 查看更多集数（全部上锁） ---------------- */
+  function openEpisodes() {
+    if (!epSheet || !sheetBody) return;
+    var slide = currentSlide();
+    if (!slide) return;
+
+    function render() {
+      var total = parseInt(slide.dataset.episodes || '0', 10) || 0;
+      if (!total) {
+        toast(emptyText);
+        return;
+      }
+      var html = '';
+      for (var i = 1; i <= total; i++) {
+        html += '<button class="ep-item" type="button" data-ep="' + i + '">'
+          + LOCK_SVG + '<span>' + i + '</span></button>';
+      }
+      sheetBody.innerHTML = html;
+      epSheet.hidden = false;
+    }
+
+    if (slide.dataset.episodes) render();
+    else ensureLoaded(slide).then(render);
   }
 
   /* ---------------- 无限加载 ---------------- */
@@ -176,10 +264,12 @@
       '<div class="ep">EP 1</div>' +
       '<h2 class="title">' + esc(it.title) + '</h2>' +
       '<p class="hint">' + esc(hint) + '</p>' +
+      '<div class="meta-actions">' +
       '<a class="cta" href="' + esc(ctaUrl) + '" target="_blank" rel="noopener">' + esc(ctaText) + '</a>' +
-      '</div>' +
+      '<button class="more-btn" type="button" data-more>' + esc(moreText) + '</button>' +
+      '</div></div>' +
       '<div class="actions">' +
-      '<button class="like" type="button" data-like aria-label="like">' + HEART + '</button>' +
+      '<button class="like" type="button" data-like aria-label="like">' + THUMB_SVG + '</button>' +
       '<span class="like-count">' + esc(it.likes || '') + '</span>' +
       '<span class="spinner" aria-hidden="true"></span>' +
       '</div>';
@@ -200,11 +290,21 @@
   }
 
   feed.addEventListener('click', function (e) {
-    var like = e.target.closest ? e.target.closest('[data-like]') : null;
+    var t = e.target;
+    var like = t.closest ? t.closest('[data-like]') : null;
     if (like) {
       e.preventDefault();
-      toast(likeHint);
+      openLikeModal();
+      return;
     }
+    var more = t.closest ? t.closest('.more-btn[data-more]') : null;
+    if (more) {
+      e.preventDefault();
+      openEpisodes();
+      return;
+    }
+    if (t.closest && t.closest('a')) return;  // 下载按钮等链接正常跳转
+    togglePlay();                              // 其余区域：点击屏幕播放/暂停
   });
 
   /* ---------------- 启动 ---------------- */
