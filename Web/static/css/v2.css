@@ -446,3 +446,9 @@ body {
     height: 12px;
     color: #fcdb00;
 }
+
+/* 第 1 集免费：正常高亮、可点击 */
+.ep-item.is-free {
+    background: #fcdb00;
+    color: #111;
+}

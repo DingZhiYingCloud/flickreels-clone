@@ -80,8 +80,21 @@
 
   if (sheetBody) {
     sheetBody.addEventListener('click', function (e) {
-      var item = e.target.closest ? e.target.closest('[data-ep]') : null;
-      if (item) openLikeModal();
+      var t = e.target;
+      if (!t.closest) return;
+      if (t.closest('[data-play]')) {          // 第 1 集免费：关掉抽屉继续播放
+        closeLayer(epSheet);
+        var s = currentSlide();
+        var v = s ? s.querySelector('video') : null;
+        if (v) {
+          v.muted = muted;
+          var p = v.play();
+          if (p && p.catch) p.catch(function () {});
+        }
+        updatePlayHint();
+        return;
+      }
+      if (t.closest('[data-ep]')) openLikeModal();  // 其余集数：引导下载 App
     });
   }
 
@@ -194,7 +207,7 @@
     observer.observe(slide);
   }
 
-  /* ---------------- 查看更多集数（全部上锁） ---------------- */
+  /* ---------------- 查看更多集数（第 1 集免费，其余上锁） ---------------- */
   function openEpisodes() {
     if (!epSheet || !sheetBody) return;
     var slide = currentSlide();
@@ -208,8 +221,14 @@
       }
       var html = '';
       for (var i = 1; i <= total; i++) {
-        html += '<button class="ep-item" type="button" data-ep="' + i + '">'
-          + LOCK_SVG + '<span>' + i + '</span></button>';
+        if (i === 1) {
+          // 第 1 集免费，正常可点
+          html += '<button class="ep-item is-free" type="button" data-play>'
+            + '<span>' + i + '</span></button>';
+        } else {
+          html += '<button class="ep-item" type="button" data-ep="' + i + '">'
+            + LOCK_SVG + '<span>' + i + '</span></button>';
+        }
       }
       sheetBody.innerHTML = html;
       epSheet.hidden = false;
